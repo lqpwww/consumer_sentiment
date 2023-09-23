@@ -1,0 +1,57 @@
+---
+title: "consumer-sentiment"
+author: "Peter Wang"
+date: "2023-09-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Let's take a look at University of Michigan survey data on how Americans feel about the economy, which can be found [here](https://data.sca.isr.umich.edu/data-archive/mine.php). Using Table 5, we have a monthly time series from 1978 onwards of the Current Economic Conditions Index ("Current Index"), which represents how survey respondents feel about current economic conditions. Details on how the various indices are calculated can be found [here](https://data.sca.isr.umich.edu/fetchdoc.php?docid=24770).
+```{r, message=FALSE}
+library(fpp3)
+library(tidyverse)
+umich <- read_csv("data/umich.csv",skip=1)
+umich$DATE <- as.Date(paste(umich$Year, umich$Month,"01", sep="-"))
+# Let's limit our investigation to the Current Economic Conditions Index
+umich <- umich[c("DATE", "Current Index")]
+colnames(umich)[colnames(umich)=="Current Index"] <- "curr_index"
+# U3 unemployment rate, monthly
+u3 <- read_csv("data/UNRATE.csv")
+colnames(u3)[colnames(u3) == "UNRATE"] <- "unrate"
+# Sticky consumer price index less food and energy
+corestick <- read_csv("data/CORESTICK.csv")
+# Consumer price index - all items total for US, seasonally adjusted
+cpitotal <- read_csv("data/CPALTT01USM661S.csv")
+colnames(cpitotal)[colnames(cpitotal) == "CPALTT01USM661S"] <- "cpi_total"
+df <- merge(umich, u3, by = "DATE")
+df <- merge(df, cpitotal, by = "DATE")
+precovid <- df[df$DATE <= "2020-02-01",]
+postcovid <- df[df$DATE >= "2020-03-01",]
+# we aren't using lagged/differenced regressors or have NAs so we'll ignore the fact
+#  we have time series data for now
+model1 <- lm(curr_index ~ unrate + cpi_total, data = precovid)
+```
+
+```{r}
+predicted_precovid <- data.frame(curr_pred = predict(model1, precovid), DATE=precovid$DATE)
+ggplot(
+  data=precovid,
+  mapping = aes(x = DATE, y = curr_index)
+  ) + 
+  geom_line(color='blue') +
+  geom_line(color='red',data=predicted_precovid,aes(y=curr_pred))
+```
+
+```{r}
+predicted <- data.frame(pred = predict(model1, df), DATE = df$DATE)
+predicted_precovid <- data.frame(curr_pred = predict(model1, precovid), DATE=precovid$DATE)
+ggplot(
+  data=df,
+  mapping = aes(x = DATE, y = curr_index)
+  ) + 
+  geom_line(color='blue') +
+  geom_line(color='red',data=predicted,aes(y=pred))
+```
